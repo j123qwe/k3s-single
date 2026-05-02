@@ -37,6 +37,61 @@ warn()    { echo -e "${YELLOW}[WARN]${NC}  $*"; }
 error()   { echo -e "${RED}[ERROR]${NC} $*" >&2; exit 1; }
 step()    { echo -e "\n${GREEN}━━━ $* ━━━${NC}"; }
 
+get_linux_arch() {
+    case "$(uname -m)" in
+        x86_64|amd64) echo "amd64" ;;
+        aarch64|arm64) echo "arm64" ;;
+        *) error "Unsupported architecture: $(uname -m)" ;;
+    esac
+}
+
+install_cilium_cli() {
+    local arch version tarball url tmpdir
+
+    if command -v cilium &>/dev/null; then
+        info "Cilium CLI already installed: $(cilium version --client 2>/dev/null | head -1 || echo cilium)"
+        return 0
+    fi
+
+    arch="$(get_linux_arch)"
+    version="${CILIUM_CLI_VERSION:-$(curl -fsSL https://raw.githubusercontent.com/cilium/cilium-cli/main/stable.txt)}"
+    tarball="cilium-linux-${arch}.tar.gz"
+    url="https://github.com/cilium/cilium-cli/releases/download/${version}/${tarball}"
+    tmpdir="$(mktemp -d)"
+
+    info "Installing Cilium CLI ${version} (${arch})"
+    curl -fsSL "${url}" -o "${tmpdir}/${tarball}"
+    curl -fsSL "${url}.sha256sum" -o "${tmpdir}/${tarball}.sha256sum"
+    (cd "${tmpdir}" && sha256sum -c "${tarball}.sha256sum")
+    tar -xzf "${tmpdir}/${tarball}" -C /usr/local/bin cilium
+    chmod +x /usr/local/bin/cilium
+    rm -rf "${tmpdir}"
+}
+
+install_k9s() {
+    local arch version tarball url tmpdir
+
+    if command -v k9s &>/dev/null; then
+        info "k9s already installed: $(k9s version -s 2>/dev/null | head -1 || echo k9s)"
+        return 0
+    fi
+
+    arch="$(get_linux_arch)"
+    if [[ "${arch}" == "amd64" ]]; then
+        arch="x86_64"
+    fi
+    version="${K9S_VERSION:-$(curl -fsSL https://api.github.com/repos/derailed/k9s/releases/latest | grep -m1 '"tag_name"' | sed -E 's/.*"(v[^"]+)".*/\1/')}"
+    tarball="k9s_Linux_${arch}.tar.gz"
+    url="https://github.com/derailed/k9s/releases/download/${version}/${tarball}"
+    tmpdir="$(mktemp -d)"
+
+    info "Installing k9s ${version} (${arch})"
+    curl -fsSL "${url}" -o "${tmpdir}/${tarball}"
+    tar -xzf "${tmpdir}/${tarball}" -C "${tmpdir}"
+    install -m 0755 "${tmpdir}/k9s" /usr/local/bin/k9s
+    rm -rf "${tmpdir}"
+}
+
 setup_user_kubeconfig_symlink() {
     local target_user target_home kube_dir kube_cfg backup_path
 
@@ -152,6 +207,14 @@ else
     info "Downloading and installing Helm …"
     curl -fsSL https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
 fi
+
+# ── Install Cilium CLI ────────────────────────────────────────────────────────
+step "Ensuring Cilium CLI is installed"
+install_cilium_cli
+
+# ── Install k9s ───────────────────────────────────────────────────────────────
+step "Ensuring k9s is installed"
+install_k9s
 
 # ── Wait for API server ───────────────────────────────────────────────────────
 step "Waiting for K3s API server"
