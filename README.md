@@ -40,9 +40,11 @@ sudo ./install.sh
 2. Writes /etc/rancher/k3s/config.yaml.
 3. Installs K3s.
 4. Installs Helm if missing.
-5. Installs/updates Cilium chart.
-6. Applies Cilium LB IP pool and L2 announcement policy.
-7. Deploys pihole namespace, Pi-hole deployment, and LoadBalancer service.
+5. Installs the Cilium CLI if missing.
+6. Installs k9s if missing.
+7. Installs/updates the Cilium chart.
+8. Applies the Cilium LB IP pool and L2 announcement policy.
+9. Deploys the pihole namespace, Pi-hole deployment, and LoadBalancer service.
 
 ## Test
 

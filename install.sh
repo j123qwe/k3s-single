@@ -70,6 +70,16 @@ download_file() {
     fi
 }
 
+get_github_release_tag() {
+    local repo="$1"
+    local release_json version
+
+    release_json="$(curl -fsSL "https://api.github.com/repos/${repo}/releases/latest")"
+    version="$(sed -nE '/"tag_name"/ { s/.*"([^"]+)".*/\1/; p; q; }' <<<"${release_json}")"
+    [[ -n "${version}" ]] || error "Unable to determine latest release tag for ${repo}"
+    printf '%s\n' "${version}"
+}
+
 install_cilium_cli() {
     local arch version tarball url tmpdir
 
@@ -102,10 +112,7 @@ install_k9s() {
     fi
 
     arch="$(get_linux_arch)"
-    if [[ "${arch}" == "amd64" ]]; then
-        arch="x86_64"
-    fi
-    version="${K9S_VERSION:-$(curl -fsSL https://api.github.com/repos/derailed/k9s/releases/latest | grep -m1 '"tag_name"' | sed -E 's/.*"(v[^"]+)".*/\1/')}"
+    version="${K9S_VERSION:-$(get_github_release_tag derailed/k9s)}"
     tarball="k9s_Linux_${arch}.tar.gz"
     url="https://github.com/derailed/k9s/releases/download/${version}/${tarball}"
     tmpdir="$(make_download_tmpdir)"
