@@ -1,0 +1,40 @@
+---
+# =============================================================================
+# Caddy Persistent Storage
+#
+# This uses a hostPath PV on the single-node K3s host.
+# Update hostPath if you prefer a different location.
+# =============================================================================
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: caddy-pv
+  labels:
+    app: caddy
+spec:
+  capacity:
+    storage: 5Gi
+  accessModes:
+    - ReadWriteOnce
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: local-path
+  hostPath:
+    path: /var/lib/k3s-single/caddy-data
+    type: DirectoryOrCreate
+
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: caddy-pvc
+  namespace: caddy
+  labels:
+    app: caddy
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 5Gi
+  storageClassName: local-path
+  volumeName: caddy-pv

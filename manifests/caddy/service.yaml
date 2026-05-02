@@ -1,0 +1,26 @@
+---
+# =============================================================================
+# Caddy LoadBalancer Service
+# =============================================================================
+apiVersion: v1
+kind: Service
+metadata:
+  name: caddy-lb
+  namespace: caddy
+  labels:
+    app: caddy
+    lb-pool: cilium-l2
+  annotations:
+    # Optional static assignment from the configured Cilium LB pool.
+    # io.cilium/lb-ipam-ips: "192.168.1.2"
+spec:
+  type: LoadBalancer
+  loadBalancerClass: io.cilium/l2-announcer
+  selector:
+    app: caddy
+  ports:
+    - name: http
+      protocol: TCP
+      port: 80
+      targetPort: 80
+  externalTrafficPolicy: Local

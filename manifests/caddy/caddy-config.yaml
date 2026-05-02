@@ -1,0 +1,19 @@
+---
+# =============================================================================
+# Caddy Config
+#
+# Serves files from /srv and enables directory listing via "browse".
+# =============================================================================
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: caddy-config
+  namespace: caddy
+  labels:
+    app: caddy
+data:
+  Caddyfile: |
+    :80 {
+      root * /srv
+      file_server browse
+    }
