@@ -1,0 +1,57 @@
+# =============================================================================
+# Cilium Helm values — K3s single-node with L2 LoadBalancer
+#
+# Chart: cilium/cilium
+# Install via:  helm install cilium cilium/cilium -n kube-system -f values.yaml
+# =============================================================================
+
+# ── Single-node operator ──────────────────────────────────────────────────────
+operator:
+  replicas: 1
+
+# ── CNI paths ─────────────────────────────────────────────────────────────────
+cni:
+  binPath: /opt/cni/bin
+  confPath: /etc/cni/net.d
+
+  # Cilium is the only CNI in this setup.
+  exclusive: true
+
+  # Keep the standard Cilium conflist path.
+  configMapKey: cni-config
+  customConf: false
+
+# ── Routing ───────────────────────────────────────────────────────────────────
+# vxlan tunnel mode works on any kernel >= 4.19 and needs no changes to
+# the underlying host network.  Switch to "native" for BGP/direct-routing.
+routingMode: tunnel
+tunnelProtocol: vxlan
+
+# ── IPAM ──────────────────────────────────────────────────────────────────────
+# "kubernetes" mode reads the podCIDR from the Node object (K3s sets this).
+ipam:
+  mode: kubernetes
+
+# ── kube-proxy ────────────────────────────────────────────────────────────────
+# Required for Cilium L2 announcements and service handling.
+kubeProxyReplacement: true
+k8sServiceHost: "127.0.0.1"
+k8sServicePort: "6443"
+
+# Advertise LoadBalancer IPs at L2 on the local subnet.
+l2announcements:
+  enabled: true
+
+# Enable IP pools for LoadBalancer services.
+externalIPs:
+  enabled: true
+
+# ── Hubble observability ──────────────────────────────────────────────────────
+hubble:
+  enabled: false
+
+# ── Misc ──────────────────────────────────────────────────────────────────────
+# Tolerate the control-plane taint present on single-node K3s clusters.
+tolerations:
+  - operator: Exists
+    effect: NoSchedule

@@ -1,0 +1,20 @@
+# K3s server configuration
+# Place at /etc/rancher/k3s/config.yaml before starting K3s
+#
+# Flannel is disabled so Cilium can act as the primary CNI.
+# Cilium handles network policy, so K3s's built-in
+# network-policy controller is disabled.
+# ServiceLB is disabled so Cilium provides LoadBalancer services.
+
+flannel-backend: "none"
+disable-network-policy: true
+disable:
+  - servicelb
+
+# Cilium L2 announcements require kube-proxy replacement.
+disable-kube-proxy: true
+
+# Optional tunables
+# cluster-cidr: "10.42.0.0/16"   # default — must match Cilium IPAM
+# service-cidr: "10.43.0.0/16"   # default
+# cluster-dns: "10.43.0.10"       # default

@@ -1,0 +1,82 @@
+---
+# =============================================================================
+# Pi-hole Deployment
+# =============================================================================
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: pihole
+  namespace: pihole
+  labels:
+    app: pihole
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: pihole
+  template:
+    metadata:
+      labels:
+        app: pihole
+    spec:
+      containers:
+        - name: pihole
+          image: pihole/pihole:2025.02.1
+          env:
+            - name: TZ
+              value: UTC
+            - name: PIHOLE_DNS_1
+              value: 1.1.1.1
+            - name: PIHOLE_DNS_2
+              value: 8.8.8.8
+            - name: FTLCONF_dns_upstreams
+              value: 1.1.1.1;8.8.8.8
+            - name: FTLCONF_webserver_api_password
+              value: ""
+            - name: FTLCONF_webserver_api_password_enabled
+              value: "false"
+            - name: DNS1
+              value: 1.1.1.1
+            - name: DNS2
+              value: 8.8.8.8
+            - name: DNSMASQ_LISTENING
+              value: all
+          ports:
+            - name: dns-tcp
+              containerPort: 53
+              protocol: TCP
+            - name: dns-udp
+              containerPort: 53
+              protocol: UDP
+            - name: http-admin
+              containerPort: 80
+              protocol: TCP
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+          readinessProbe:
+            httpGet:
+              path: /admin/
+              port: 80
+            initialDelaySeconds: 15
+            periodSeconds: 10
+            timeoutSeconds: 3
+          livenessProbe:
+            httpGet:
+              path: /admin/
+              port: 80
+            initialDelaySeconds: 60
+            periodSeconds: 20
+            timeoutSeconds: 3
+          startupProbe:
+            httpGet:
+              path: /admin/
+              port: 80
+            # Give Pi-hole time to bootstrap gravity DB on first start.
+            failureThreshold: 30
+            periodSeconds: 10
+            timeoutSeconds: 3

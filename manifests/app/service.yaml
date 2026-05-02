@@ -1,0 +1,42 @@
+---
+# =============================================================================
+# Pi-hole LoadBalancer Service
+#
+# Cilium assigns this service an IP from a CiliumLoadBalancerIPPool and
+# advertises it on L2 using CiliumL2AnnouncementPolicy.
+#
+# The assigned external IP will appear in:
+#   kubectl -n pihole get svc pihole-lb -o wide
+# =============================================================================
+apiVersion: v1
+kind: Service
+metadata:
+  name: pihole-lb
+  namespace: pihole
+  labels:
+    app: pihole
+    lb-pool: cilium-l2
+  annotations:
+    # Optional static assignment from the configured Cilium LB pool.
+    # io.cilium/lb-ipam-ips: "198.51.100.240"
+spec:
+  type: LoadBalancer
+  loadBalancerClass: io.cilium/l2-announcer
+  selector:
+    app: pihole
+  ports:
+    - name: dns-tcp
+      protocol: TCP
+      port: 53
+      targetPort: 53
+    - name: dns-udp
+      protocol: UDP
+      port: 53
+      targetPort: 53
+    - name: http-admin
+      protocol: TCP
+      port: 80
+      targetPort: 80
+  # externalTrafficPolicy: Local preserves the client source IP and routes
+  # traffic only to nodes that host a matching pod.
+  externalTrafficPolicy: Local
