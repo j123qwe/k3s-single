@@ -45,6 +45,31 @@ get_linux_arch() {
     esac
 }
 
+make_download_tmpdir() {
+    local tmpdir
+
+    if tmpdir="$(mktemp -d /var/tmp/k3s-single.XXXXXX 2>/dev/null)"; then
+        echo "${tmpdir}"
+        return 0
+    fi
+
+    if tmpdir="$(mktemp -d 2>/dev/null)"; then
+        echo "${tmpdir}"
+        return 0
+    fi
+
+    error "Unable to create temporary directory for downloads"
+}
+
+download_file() {
+    local url="$1"
+    local output="$2"
+
+    if ! curl -fL --retry 5 --retry-all-errors --connect-timeout 15 --max-time 300 -o "${output}" "${url}"; then
+        error "Failed to download ${url} to ${output}. Check free disk space and network connectivity."
+    fi
+}
+
 install_cilium_cli() {
     local arch version tarball url tmpdir
 
@@ -57,11 +82,11 @@ install_cilium_cli() {
     version="${CILIUM_CLI_VERSION:-$(curl -fsSL https://raw.githubusercontent.com/cilium/cilium-cli/main/stable.txt)}"
     tarball="cilium-linux-${arch}.tar.gz"
     url="https://github.com/cilium/cilium-cli/releases/download/${version}/${tarball}"
-    tmpdir="$(mktemp -d)"
+    tmpdir="$(make_download_tmpdir)"
 
     info "Installing Cilium CLI ${version} (${arch})"
-    curl -fsSL "${url}" -o "${tmpdir}/${tarball}"
-    curl -fsSL "${url}.sha256sum" -o "${tmpdir}/${tarball}.sha256sum"
+    download_file "${url}" "${tmpdir}/${tarball}"
+    download_file "${url}.sha256sum" "${tmpdir}/${tarball}.sha256sum"
     (cd "${tmpdir}" && sha256sum -c "${tarball}.sha256sum")
     tar -xzf "${tmpdir}/${tarball}" -C /usr/local/bin cilium
     chmod +x /usr/local/bin/cilium
@@ -83,10 +108,10 @@ install_k9s() {
     version="${K9S_VERSION:-$(curl -fsSL https://api.github.com/repos/derailed/k9s/releases/latest | grep -m1 '"tag_name"' | sed -E 's/.*"(v[^"]+)".*/\1/')}"
     tarball="k9s_Linux_${arch}.tar.gz"
     url="https://github.com/derailed/k9s/releases/download/${version}/${tarball}"
-    tmpdir="$(mktemp -d)"
+    tmpdir="$(make_download_tmpdir)"
 
     info "Installing k9s ${version} (${arch})"
-    curl -fsSL "${url}" -o "${tmpdir}/${tarball}"
+    download_file "${url}" "${tmpdir}/${tarball}"
     tar -xzf "${tmpdir}/${tarball}" -C "${tmpdir}"
     install -m 0755 "${tmpdir}/k9s" /usr/local/bin/k9s
     rm -rf "${tmpdir}"
