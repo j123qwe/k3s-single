@@ -26,6 +26,7 @@ KUBECONFIG_PATH="/etc/rancher/k3s/k3s.yaml"
 KUBECONFIG_MODE="${KUBECONFIG_MODE:-0644}"
 L2_POOL_START_DEFAULT="${L2_POOL_START:-192.168.1.240}"
 L2_POOL_STOP_DEFAULT="${L2_POOL_STOP:-192.168.1.250}"
+PIHOLE_LB_IP_DEFAULT="${PIHOLE_LB_IP:-}"
 SKIP_L2_POOL_PROMPT="${SKIP_L2_POOL_PROMPT:-false}"
 export KUBECONFIG="${KUBECONFIG_PATH}"
 
@@ -35,6 +36,34 @@ info()    { echo -e "${GREEN}[INFO]${NC}  $*"; }
 warn()    { echo -e "${YELLOW}[WARN]${NC}  $*"; }
 error()   { echo -e "${RED}[ERROR]${NC} $*" >&2; exit 1; }
 step()    { echo -e "\n${GREEN}━━━ $* ━━━${NC}"; }
+
+setup_user_kubeconfig_symlink() {
+    local target_user target_home kube_dir kube_cfg backup_path
+
+    target_user="${SUDO_USER:-${USER}}"
+    target_home="$(getent passwd "${target_user}" | cut -d: -f6)"
+
+    if [[ -z "${target_home}" || ! -d "${target_home}" ]]; then
+        warn "Could not resolve home for user ${target_user}; skipping ~/.kube/config symlink"
+        return 0
+    fi
+
+    kube_dir="${target_home}/.kube"
+    kube_cfg="${kube_dir}/config"
+
+    mkdir -p "${kube_dir}"
+
+    if [[ -e "${kube_cfg}" || -L "${kube_cfg}" ]]; then
+        backup_path="${kube_cfg}.backup.$(date +%Y%m%d%H%M%S)"
+        mv "${kube_cfg}" "${backup_path}"
+        info "Backed up existing kubeconfig to ${backup_path}"
+    fi
+
+    ln -s "${KUBECONFIG_PATH}" "${kube_cfg}"
+    chown -h "${target_user}:${target_user}" "${kube_cfg}" 2>/dev/null || true
+    chown -R "${target_user}:${target_user}" "${kube_dir}" 2>/dev/null || true
+    info "Linked ${kube_cfg} -> ${KUBECONFIG_PATH}"
+}
 
 cleanup_old_cilium_chains() {
     # Stale OLD_CILIUM_* chains from previous runs can break NAT reconciliation.
@@ -143,6 +172,9 @@ step "Setting kubeconfig permissions"
 chmod "${KUBECONFIG_MODE}" "${KUBECONFIG_PATH}"
 info "Set ${KUBECONFIG_PATH} mode to ${KUBECONFIG_MODE}"
 
+step "Configuring user kubeconfig symlink"
+setup_user_kubeconfig_symlink
+
 # ── Deploy Cilium ─────────────────────────────────────────────────────────────
 step "Deploying Cilium ${CILIUM_CHART_VERSION} (primary CNI)"
 helm repo add cilium https://helm.cilium.io 2>/dev/null || true
@@ -176,6 +208,7 @@ wait_for_crd ciliuml2announcementpolicies.cilium.io
 step "Confirming Cilium L2 IP pool"
 L2_POOL_START="${L2_POOL_START_DEFAULT}"
 L2_POOL_STOP="${L2_POOL_STOP_DEFAULT}"
+PIHOLE_LB_IP="${PIHOLE_LB_IP_DEFAULT}"
 
 if [[ "${SKIP_L2_POOL_PROMPT}" != "true" ]]; then
     read -rp "L2 pool start IP [${L2_POOL_START_DEFAULT}]: " INPUT_START
@@ -192,8 +225,24 @@ else
     info "Skipping L2 pool prompt (SKIP_L2_POOL_PROMPT=true)"
 fi
 
+step "Confirming Pi-hole LoadBalancer IP"
+PIHOLE_LB_IP_DEFAULT="${PIHOLE_LB_IP:-${L2_POOL_START}}"
+if [[ -n "${PIHOLE_LB_IP:-}" ]]; then
+    info "Using Pi-hole LB IP from environment: ${PIHOLE_LB_IP}"
+elif [[ "${SKIP_L2_POOL_PROMPT}" != "true" ]]; then
+    read -rp "Pi-hole LoadBalancer IP [${PIHOLE_LB_IP_DEFAULT}]: " INPUT_PIHOLE_LB_IP
+    PIHOLE_LB_IP="${INPUT_PIHOLE_LB_IP:-${PIHOLE_LB_IP_DEFAULT}}"
+else
+    PIHOLE_LB_IP="${PIHOLE_LB_IP_DEFAULT}"
+    info "Using default Pi-hole LB IP ${PIHOLE_LB_IP} (SKIP_L2_POOL_PROMPT=true)"
+fi
+
 if [[ "${L2_POOL_START}" == 198.51.100.* || "${L2_POOL_STOP}" == 198.51.100.* ]]; then
     error "L2 pool is using documentation example addresses (198.51.100.0/24). Set LAN-reachable IPs before continuing."
+fi
+
+if [[ "${PIHOLE_LB_IP}" == 198.51.100.* ]]; then
+    error "Pi-hole LB IP is using documentation example addresses (198.51.100.0/24). Set a LAN-reachable IP before continuing."
 fi
 
 step "Applying Cilium L2 announcement and LB IP pool resources"
@@ -222,6 +271,8 @@ step "Deploying sample application"
 kubectl apply -f "${SCRIPT_DIR}/manifests/app/namespace.yaml"
 kubectl apply -f "${SCRIPT_DIR}/manifests/app/deployment.yaml"
 kubectl apply -f "${SCRIPT_DIR}/manifests/app/service.yaml"
+kubectl -n pihole annotate service pihole-lb io.cilium/lb-ipam-ips="${PIHOLE_LB_IP}" --overwrite
+info "Requested Pi-hole LoadBalancer IP: ${PIHOLE_LB_IP}"
 
 kubectl -n pihole rollout status deployment/pihole --timeout=180s
 
@@ -241,6 +292,5 @@ else
     warn "LoadBalancer IP not yet assigned — run: kubectl -n pihole get svc pihole-lb"
 fi
 echo
-info "Done! Export KUBECONFIG to use kubectl:"
-info "  export KUBECONFIG=/etc/rancher/k3s/k3s.yaml"
+info "Done! kubectl will use ~/.kube/config symlinked to ${KUBECONFIG_PATH}"
 info "If you want stricter permissions later, run: chmod 0600 /etc/rancher/k3s/k3s.yaml"

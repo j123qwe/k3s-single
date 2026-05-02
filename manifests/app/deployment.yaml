@@ -21,7 +21,7 @@ spec:
     spec:
       containers:
         - name: pihole
-          image: pihole/pihole:2025.02.1
+          image: pihole/pihole:2026.04.1
           env:
             - name: TZ
               value: UTC
@@ -39,6 +39,8 @@ spec:
               value: 1.1.1.1
             - name: DNS2
               value: 8.8.8.8
+            - name: FTLCONF_dns_listeningMode
+              value: ALL
             - name: DNSMASQ_LISTENING
               value: all
           ports:
